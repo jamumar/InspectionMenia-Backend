@@ -1,0 +1,42 @@
+import { auth } from "../config/firebase.js";
+
+export const requireAuth = async (req, res, next) => {
+  // If Firebase Admin SDK is not initialized, check if we are in development and can bypass
+  if (!auth) {
+    if (process.env.NODE_ENV === "development" || !process.env.NODE_ENV) {
+      console.warn("Bypassing auth check since Firebase Admin SDK is not configured. Attaching mock user.");
+      req.user = {
+        uid: "mock_user_123",
+        email: "inspector.mock@inspectsafe.ai",
+        name: "Mock Inspector"
+      };
+      return next();
+    }
+    return res.status(500).json({ error: "Authentication system is not configured on the server." });
+  }
+
+  let token = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  } else if (req.query.token) {
+    token = req.query.token;
+  }
+
+  if (!token) {
+    return res.status(401).json({ error: "Access Denied: No authentication token provided." });
+  }
+
+  try {
+    const decodedToken = await auth.verifyIdToken(token);
+    req.user = {
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+      name: decodedToken.name || decodedToken.email.split("@")[0]
+    };
+    next();
+  } catch (error) {
+    console.error("Error verifying Firebase ID token:", error);
+    res.status(401).json({ error: "Access Denied: Invalid or expired authentication token." });
+  }
+};
