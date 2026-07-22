@@ -49,17 +49,21 @@ export const requireAdmin = async (req, res, next) => {
 
     const { uid, email } = req.user;
 
-    if (email === "umar2491812@gmail.com" || (email && email.toLowerCase().includes("admin"))) {
-      return next();
-    }
-
     if (!db) {
-      // Mock mode default bypass
-      return next();
+      // Mock mode fallback check
+      if (email === "umar2491812@gmail.com") {
+        return next();
+      }
+      return res.status(403).json({ error: "Access Denied: Admin privileges required." });
     }
 
+    // Live mode: Query Firestore dynamically to verify role is "Admin"
     const userDoc = await db.collection("users").doc(uid).get();
     if (!userDoc.exists || userDoc.data().role !== "Admin") {
+      // Allow primary tester email bypass in case profile document wasn't fully created
+      if (email === "umar2491812@gmail.com") {
+        return next();
+      }
       return res.status(403).json({ error: "Access Denied: Admin privileges required." });
     }
 
