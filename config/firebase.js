@@ -23,7 +23,18 @@ try {
     }
   }
 
-  // Option B: Load from individual Env Variables if Option A not resolved
+  // Option B: Load from raw Service Account JSON string in environment variable
+  if (!credential && process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    try {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+      credential = cert(serviceAccount);
+      console.log("Firebase Admin SDK initialized using FIREBASE_SERVICE_ACCOUNT_JSON string.");
+    } catch (parseErr) {
+      console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON env variable:", parseErr);
+    }
+  }
+
+  // Option C: Load from individual Env Variables
   if (!credential && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
     const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n");
     credential = cert({
@@ -31,7 +42,7 @@ try {
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       privateKey: privateKey,
     });
-    console.log("Firebase Admin SDK initialized using Environment Variables.");
+    console.log("Firebase Admin SDK initialized using individual Environment Variables.");
   }
 
   if (!credential) {
