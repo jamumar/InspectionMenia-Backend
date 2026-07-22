@@ -139,7 +139,8 @@ export const createUser = async (req, res) => {
     return res.status(201).json({ uid: userRecord.uid, ...userData });
   } catch (error) {
     console.error("Admin: Failed to create user:", error);
-    res.status(5500).json({ error: error.message || "Failed to create user account." });
+    const statusCode = error.code === "auth/email-already-exists" ? 400 : 500;
+    return res.status(statusCode).json({ error: error.message || "Failed to create user account." });
   }
 };
 
