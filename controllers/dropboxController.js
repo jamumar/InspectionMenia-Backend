@@ -203,11 +203,13 @@ export const handleCallback = async (req, res, next) => {
       console.warn(`Saved Dropbox connection in-memory for uid (No Firestore): ${targetUid}`);
     }
 
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+
     // Redirect user back to frontend
     if (mode === "login" && customToken) {
-      res.redirect(`http://localhost:5173/?firebase_token=${customToken}`);
+      res.redirect(`${frontendUrl.replace(/\/$/, "")}/?firebase_token=${customToken}`);
     } else {
-      res.redirect("http://localhost:5173/?dropbox=success");
+      res.redirect(`${frontendUrl.replace(/\/$/, "")}/?dropbox=success`);
     }
   } catch (error) {
     console.error("Dropbox callback failed:", error.response?.data || error);

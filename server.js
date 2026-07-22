@@ -18,7 +18,29 @@ if (process.env.NODE_ENV === "development") {
 }
 
 // Global middlewares
-app.use(cors());
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://inspetion-menia.vercel.app",
+  process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, "") : null
+].filter(Boolean);
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    // In development or if origin matches allowed list, permit access
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes(origin.replace(/\/$/, ""))) {
+      return callback(null, true);
+    }
+    // Fallback logic: allow any origin in dev if not matched explicitly
+    if (process.env.NODE_ENV === "development") {
+      return callback(null, true);
+    }
+    const msg = 'The CORS policy for this site does not allow access from origin ' + origin;
+    return callback(new Error(msg), false);
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: "5mb" })); // Add limit to allow base64 uploads
 
 // API Base Endpoints
