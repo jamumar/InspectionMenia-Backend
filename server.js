@@ -6,6 +6,7 @@ import reportRoutes from "./routes/reportRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
 import dropboxRoutes from "./routes/dropboxRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
@@ -47,6 +48,7 @@ app.use(express.json({ limit: "5mb" })); // Add limit to allow base64 uploads
 app.use("/api/reports", reportRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/user", userRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/", dropboxRoutes);
 
 // Health check endpoint

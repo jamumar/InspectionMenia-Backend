@@ -1,4 +1,4 @@
-import { auth } from "../config/firebase.js";
+import { auth, db } from "../config/firebase.js";
 
 export const requireAuth = async (req, res, next) => {
   // If Firebase Admin SDK is not initialized, check if we are in development and can bypass
@@ -38,5 +38,35 @@ export const requireAuth = async (req, res, next) => {
   } catch (error) {
     console.error("Error verifying Firebase ID token:", error);
     res.status(401).json({ error: "Access Denied: Invalid or expired authentication token." });
+  }
+};
+
+export const requireAdmin = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Access Denied: Unauthorized." });
+    }
+
+    const { uid, email } = req.user;
+
+    // Direct bypass for default Admin email
+    if (email === "umar2491812@gmail.com") {
+      return next();
+    }
+
+    if (!db) {
+      // Mock mode default bypass
+      return next();
+    }
+
+    const userDoc = await db.collection("users").doc(uid).get();
+    if (!userDoc.exists || userDoc.data().role !== "Admin") {
+      return res.status(403).json({ error: "Access Denied: Admin privileges required." });
+    }
+
+    next();
+  } catch (error) {
+    console.error("Error verifying admin state:", error);
+    res.status(500).json({ error: "Internal authorization verification failed." });
   }
 };

@@ -5,7 +5,7 @@ const getDefaultProfile = (uid, email, displayName) => ({
   uid,
   name: displayName || (email ? email.split("@")[0] : "Inspector"),
   email: email || "inspector@inspectsafe.ai",
-  role: "Senior RICS Chartered Surveyor",
+  role: email === "umar2491812@gmail.com" ? "Admin" : "Senior RICS Chartered Surveyor",
   organization: "InspectSafe UK Ltd",
   phone: "+44 (20) 7946 0192",
   location: "London, United Kingdom",
@@ -101,5 +101,42 @@ export const uploadAvatar = async (req, res) => {
   } catch (error) {
     console.error("Error uploading avatar:", error);
     res.status(500).json({ error: "Failed to save avatar to profile" });
+  }
+};
+
+// POST /api/user/forgot-password (Public)
+export const submitForgotPasswordRequest = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required." });
+    }
+
+    const name = email.split("@")[0];
+    const avatar = name.substring(0, 2).toUpperCase();
+    
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateStr = now.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    const timestampStr = `${dateStr}, ${timeStr}`;
+
+    const requestData = {
+      name,
+      email,
+      timestamp: timestampStr,
+      status: "Pending",
+      avatar,
+      createdAt: now.toISOString()
+    };
+
+    if (!db) {
+      return res.json({ message: "Password reset request submitted (Mock).", request: requestData });
+    }
+
+    await db.collection("passwordRequests").add(requestData);
+    return res.json({ message: "Password reset request submitted successfully.", request: requestData });
+  } catch (error) {
+    console.error("Error submitting forgot password request:", error);
+    res.status(500).json({ error: "Failed to submit password reset request." });
   }
 };

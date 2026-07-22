@@ -1,8 +1,11 @@
 import express from "express";
 import { requireAuth } from "../middleware/auth.js";
-import { getUserProfile, updateUserProfile, uploadAvatar } from "../controllers/userController.js";
+import { getUserProfile, updateUserProfile, uploadAvatar, submitForgotPasswordRequest } from "../controllers/userController.js";
 
 const router = express.Router();
+
+// Public forgot password request endpoint
+router.post("/forgot-password", submitForgotPasswordRequest);
 
 // Fetch active user profile (Protected)
 router.get("/profile", requireAuth, getUserProfile);
