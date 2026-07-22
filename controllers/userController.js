@@ -5,7 +5,7 @@ const getDefaultProfile = (uid, email, displayName) => ({
   uid,
   name: displayName || (email ? email.split("@")[0] : "Inspector"),
   email: email || "inspector@inspectsafe.ai",
-  role: email === "umar2491812@gmail.com" ? "Admin" : "Senior RICS Chartered Surveyor",
+  role: (email === "umar2491812@gmail.com" || (email && email.toLowerCase().includes("admin"))) ? "Admin" : "Senior RICS Chartered Surveyor",
   organization: "InspectSafe UK Ltd",
   phone: "+44 (20) 7946 0192",
   location: "London, United Kingdom",
@@ -34,7 +34,7 @@ export const getUserProfile = async (req, res) => {
     }
 
     const data = docSnapshot.data();
-    if (email === "umar2491812@gmail.com" && data.role !== "Admin") {
+    if ((email === "umar2491812@gmail.com" || (email && email.toLowerCase().includes("admin"))) && data.role !== "Admin") {
       data.role = "Admin";
       data.access = "Full access";
       await userDocRef.update({ role: "Admin", access: "Full access" });
