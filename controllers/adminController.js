@@ -207,8 +207,18 @@ export const updateUserPassword = async (req, res) => {
       return res.status(500).json({ error: "Firebase Authentication SDK is not configured." });
     }
 
+    let targetUid = uid;
+    if (uid.includes("@")) {
+      try {
+        const userRecord = await auth.getUserByEmail(uid);
+        targetUid = userRecord.uid;
+      } catch (emailErr) {
+        return res.status(404).json({ error: `No registered account found for email: ${uid}` });
+      }
+    }
+
     // Reset password in Firebase Auth
-    await auth.updateUser(uid, { password });
+    await auth.updateUser(targetUid, { password });
     return res.json({ message: "Password updated successfully." });
   } catch (error) {
     console.error("Admin: Failed to reset password:", error);
