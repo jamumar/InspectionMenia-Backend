@@ -66,16 +66,17 @@ const getAccessToken = async (refreshToken) => {
  */
 export const redirectToDropbox = async (req, res, next) => {
   try {
-    const { mode = "login", uid } = req.query;
+    const { mode = "login", uid, origin } = req.query;
 
     if (mode === "link" && !uid) {
       return res.status(400).json({ error: "Missing required query parameter 'uid' for link mode" });
     }
 
-    // Pack mode and uid into a state object
+    // Pack mode, uid, and origin into a state object
     const stateObj = {
       mode,
       uid: uid || null,
+      origin: origin || null,
       timestamp: Date.now()
     };
 
@@ -116,7 +117,7 @@ export const handleCallback = async (req, res, next) => {
       return res.status(400).send("Invalid OAuth state verification token.");
     }
 
-    const { mode, uid: providedUid } = stateObj;
+    const { mode, uid: providedUid, origin: providedOrigin } = stateObj;
 
     // Exchange the Auth Code for tokens
     const redirectUri = process.env.DROPBOX_REDIRECT_URI || "http://localhost:5000/auth/dropbox/callback";
@@ -203,7 +204,7 @@ export const handleCallback = async (req, res, next) => {
       console.warn(`Saved Dropbox connection in-memory for uid (No Firestore): ${targetUid}`);
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const frontendUrl = providedOrigin || process.env.FRONTEND_URL || "http://localhost:5173";
 
     // Redirect user back to frontend
     if (mode === "login" && customToken) {
