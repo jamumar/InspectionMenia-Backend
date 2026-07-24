@@ -9,6 +9,7 @@ const mockConnectionsDb = {};
 
 // optimized cache configurations
 const directoryCache = new Map();
+const thumbnailCache = new Map();
 const CACHE_TTL = 3 * 60 * 1000; // 3 minutes
 
 const cleanExpiredCache = () => {
@@ -464,6 +465,15 @@ export const getThumbnail = async (req, res, next) => {
       return res.status(400).json({ error: "Missing required query parameter: path" });
     }
 
+    const thumbnailCacheKey = `${uid}:${filePath}`;
+    if (thumbnailCache.has(thumbnailCacheKey)) {
+      console.log(`Serving cached thumbnail binary for: ${filePath}`);
+      const cachedBuffer = thumbnailCache.get(thumbnailCacheKey);
+      res.setHeader("Content-Type", "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=86400"); // 1 day browser cache
+      return res.send(cachedBuffer);
+    }
+
     let docData = null;
     if (db) {
       const doc = await db.collection("users").doc(uid).collection("connections").doc("dropbox").get();
@@ -506,16 +516,23 @@ export const getThumbnail = async (req, res, next) => {
       null,
       {
         headers,
-        responseType: "stream"
+        responseType: "arraybuffer"
       }
     );
 
+    const buffer = Buffer.from(response.data);
+    
+    // Cache up to 1000 items to avoid running out of memory
+    if (thumbnailCache.size < 1000) {
+      thumbnailCache.set(thumbnailCacheKey, buffer);
+    }
+
     res.setHeader("Content-Type", "image/jpeg");
     res.setHeader("Cache-Control", "public, max-age=86400"); // 1 day browser cache
-    response.data.pipe(res);
+    res.send(buffer);
   } catch (error) {
     console.error("Dropbox getThumbnail failed, falling back to redirect:", error.response?.data || error);
-    // Fallback: redirect to direct viewFile
-    res.redirect(`/api/dropbox/view?path=${encodeURIComponent(filePath)}`);
+    // Fallback: redirect to direct viewFile using req.query.path to avoid block-scoping ReferenceError
+    res.redirect(`/api/dropbox/view?path=${encodeURIComponent(req.query.path || "")}`);
   }
 };
