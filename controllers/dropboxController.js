@@ -7,6 +7,19 @@ const ALGORITHM = "aes-256-cbc";
 // Local in-memory store for fallback in development when Firestore is not configured
 const mockConnectionsDb = {};
 
+// optimized cache configurations
+const directoryCache = new Map();
+const CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+
+const cleanExpiredCache = () => {
+  const now = Date.now();
+  for (const [key, value] of directoryCache.entries()) {
+    if (value.expiresAt < now) {
+      directoryCache.delete(key);
+    }
+  }
+};
+
 // Helper: Get Encryption Key Buffer
 const getEncryptionKey = () => {
   const key = process.env.ENCRYPTION_KEY;
@@ -259,8 +272,21 @@ export const listFiles = async (req, res, next) => {
   try {
     const uid = req.user.uid;
     const path = req.query.path || ""; // Default is root directory
-    let docData = null;
+    const cursor = req.query.cursor || "";
+    
+    cleanExpiredCache();
+    const cacheKey = `${uid}:${path}:${cursor}`;
 
+    // Read cache only for initial listings without pagination cursor
+    if (!cursor && directoryCache.has(cacheKey)) {
+      const cached = directoryCache.get(cacheKey);
+      if (cached.expiresAt > Date.now()) {
+        console.log(`Serving cached folder list for: ${path}`);
+        return res.json(cached.data);
+      }
+    }
+
+    let docData = null;
     if (db) {
       const doc = await db.collection("users").doc(uid).collection("connections").doc("dropbox").get();
       if (doc.exists) {
@@ -280,29 +306,55 @@ export const listFiles = async (req, res, next) => {
     // Acquire temporary access token
     const accessToken = await getAccessToken(refreshToken);
 
-    // Call Dropbox to list folder
-    const response = await axios.post(
-      "https://api.dropboxapi.com/2/files/list_folder",
-      {
-        path: path,
-        recursive: false,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-          "Dropbox-API-Path-Root": JSON.stringify({
-            ".tag": "root",
-            root: docData.rootNamespace,
-          }),
-        },
-      }
-    );
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    };
 
-    res.json({
+    if (docData.rootNamespace) {
+      headers["Dropbox-API-Path-Root"] = JSON.stringify({
+        ".tag": "root",
+        root: docData.rootNamespace,
+      });
+    }
+
+    let response;
+    if (cursor) {
+      // Continue fetching paginated folder entries
+      response = await axios.post(
+        "https://api.dropboxapi.com/2/files/list_folder/continue",
+        { cursor },
+        { headers }
+      );
+    } else {
+      // Initial list request with high performance threshold limit of 100
+      response = await axios.post(
+        "https://api.dropboxapi.com/2/files/list_folder",
+        {
+          path: path,
+          recursive: false,
+          limit: 100
+        },
+        { headers }
+      );
+    }
+
+    const responseData = {
       success: true,
       entries: response.data.entries,
-    });
+      has_more: response.data.has_more,
+      cursor: response.data.cursor
+    };
+
+    // Store listing data in cache (only for non-paginated queries)
+    if (!cursor) {
+      directoryCache.set(cacheKey, {
+        data: responseData,
+        expiresAt: Date.now() + CACHE_TTL
+      });
+    }
+
+    res.json(responseData);
   } catch (error) {
     console.error("Dropbox listFiles failed:", error.response?.data || error);
     res.status(500).json(error.response?.data || { error: "Failed to list folders from Dropbox" });
@@ -370,18 +422,25 @@ export const viewFile = async (req, res, next) => {
     // Acquire temporary access token
     const accessToken = await getAccessToken(refreshToken);
 
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    };
+
+    if (docData.rootNamespace) {
+      headers["Dropbox-API-Path-Root"] = JSON.stringify({
+        ".tag": "root",
+        root: docData.rootNamespace,
+      });
+    }
+
     // Call Dropbox to get temporary link
     const response = await axios.post(
       "https://api.dropboxapi.com/2/files/get_temporary_link",
       {
         path: filePath,
       },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      }
+      { headers }
     );
 
     // Redirect the browser to the temporary link CDN url
@@ -389,5 +448,74 @@ export const viewFile = async (req, res, next) => {
   } catch (error) {
     console.error("Dropbox viewFile failed:", error.response?.data || error);
     res.status(500).json(error.response?.data || { error: "Failed to fetch file view link from Dropbox" });
+  }
+};
+
+/**
+ * 7. GET /api/dropbox/thumbnail
+ * Stream downscaled image thumbnail from Dropbox for faster client preview loads.
+ */
+export const getThumbnail = async (req, res, next) => {
+  try {
+    const uid = req.user.uid;
+    const { path: filePath } = req.query;
+
+    if (!filePath) {
+      return res.status(400).json({ error: "Missing required query parameter: path" });
+    }
+
+    let docData = null;
+    if (db) {
+      const doc = await db.collection("users").doc(uid).collection("connections").doc("dropbox").get();
+      if (doc.exists) {
+        docData = doc.data();
+      }
+    } else {
+      docData = mockConnectionsDb[uid];
+    }
+
+    if (!docData) {
+      return res.status(401).json({ error: "Dropbox account is not connected." });
+    }
+
+    const refreshToken = decrypt(docData.refreshToken);
+    const accessToken = await getAccessToken(refreshToken);
+
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      "Dropbox-API-Arg": JSON.stringify({
+        resource: {
+          ".tag": "path",
+          path: filePath
+        },
+        format: "jpeg",
+        size: "w640h480",
+        mode: "strict"
+      })
+    };
+
+    if (docData.rootNamespace) {
+      headers["Dropbox-API-Path-Root"] = JSON.stringify({
+        ".tag": "root",
+        root: docData.rootNamespace
+      });
+    }
+
+    const response = await axios.post(
+      "https://content.dropboxapi.com/2/files/get_thumbnail_v2",
+      null,
+      {
+        headers,
+        responseType: "stream"
+      }
+    );
+
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=86400"); // 1 day browser cache
+    response.data.pipe(res);
+  } catch (error) {
+    console.error("Dropbox getThumbnail failed, falling back to redirect:", error.response?.data || error);
+    // Fallback: redirect to direct viewFile
+    res.redirect(`/api/dropbox/view?path=${encodeURIComponent(filePath)}`);
   }
 };

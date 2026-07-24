@@ -6,6 +6,7 @@ import {
   listFiles,
   disconnect,
   viewFile,
+  getThumbnail,
 } from "../controllers/dropboxController.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -25,6 +26,9 @@ router.get("/api/dropbox/files", requireAuth, listFiles);
 
 // Resolve direct view url for a file (Protected)
 router.get("/api/dropbox/view", requireAuth, viewFile);
+
+// Stream image thumbnail preview (Protected)
+router.get("/api/dropbox/thumbnail", requireAuth, getThumbnail);
 
 // Disconnect/Unlink Dropbox account (Protected)
 router.post("/api/dropbox/disconnect", requireAuth, disconnect);
